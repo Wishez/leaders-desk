@@ -12,7 +12,7 @@ Vue.config.productionTip = false
 
 Vue.use(VueProgressiveImage)
 Vue.use(VueResource)
-Vue.http.options.root = `${process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://shining-present.ru:3000'}/api`
+Vue.http.options.root = `${process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : 'https://shining-present.ru:4000'}/api`
 /* eslint-disable no-new */
 new Vue({
   el: '#app',

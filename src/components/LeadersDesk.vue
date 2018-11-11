@@ -1,7 +1,26 @@
 <template>
   <section class="leaders">
+    <h1 class="leaders__title">Доска лидеров</h1>
 
-    <form class="form" @submit="submit">
+    <p v-if="leadersResponse.isLoading" aria-live="assertive">
+        <strong>Загружаю список...</strong>
+    </p>
+
+    <p v-if="leadersResponse.isFailed" aria-live="assertive">
+        <strong>{{ leadersResponse.errorMessage }}</strong>
+    </p>
+
+    <ul>
+      <leader v-for="({ authorName, comment, leaderName, leaderImage }, index) in leaders" :key="index" 
+        :authorName="authorName"
+        :authorComment="comment"
+        :leaderName="leaderName"
+        :leaderImage="leaderImage"
+      />
+    </ul>
+
+
+    <form ref="form" class="form" @submit="submit">
       <h1 class="form__title">Добавь своего лидера</h1>
 
       <base-input 
@@ -33,26 +52,32 @@
         labelText="Комментарий к лидеру"
         placeholder="Он такой харизматичный и стабильный..."
         is-textarea/>
-      
-      <button class="form__button button" type="submit">Добавить</button>
+
+      <p v-if="authorResponse.isFailed">
+        <strong>{{ authorResponse.errorMessage }}</strong>
+      </p>
+
+      <button :disabled="authorResponse.isLoading" aria-live="polite" class="form__button button" type="submit" >
+        {{ authorResponse.isLoading ? 'Добавляю на доску...' : 'Добавить' }}
+      </button>
+
+      <!-- <button type='button' class="underscoredButton form__button" @click="clearForm">
+        Очистить поля от скверны
+      </button> -->
     </form>
-
-    <h1 class="leaders__title">Доска лидеров</h1>
-
-    <ul>
-      <leader v-for="({ authorName, comment, leaderName, leaderImage }, index) in leaders" :key="index" 
-        :authorName="authorName"
-        :authorComment="comment"
-        :leaderName="leaderName"
-        :leaderImage="leaderImage"
-      />
-    </ul>
   </section>
 </template>
 
 <script>
 import BaseInput from './BaseInput'
 import Leader from './Leader'
+import {
+    isStatusOk,
+    getErrorMessage,
+    defaultResponse,
+    ResponseNames,
+    DefaultMessages,
+} from '@/constants/response'
 
 export default {
   name: 'LeadersDesk',
@@ -68,52 +93,120 @@ export default {
       comment: '',
 
       heading: '',
-      leaders: [
-        {
-          leaderName: 'Владимир Владимирович Путин',
-          leaderImage: 'https://fortunedotcom.files.wordpress.com/2014/09/451256444.jpg',
-          comment: 'Прелестный, харизматичный, любимый',
-          authorName: 'Марья Петровна',
-        },
-        {
-          leaderName: 'Дмитрий Анатольевич Медведев',
-          leaderImage: 'https://www.oblgazeta.ru/media/news_photos/2018/01/04/P5BGzOoRALa9cte2xC2jphVMRT4aA4up.jpg',
-          comment: 'Главное, чтобы не спал',
-          authorName: 'Марья Петровна',
-        },
-        {
-          leaderName: 'Сергей Кужугетович Шойгу',
-          leaderImage: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Official_portrait_of_Sergey_Shoigu_with_awards.jpg/1200px-Official_portrait_of_Sergey_Shoigu_with_awards.jpg',
-          comment: 'Боевой парень',
-          authorName: 'Марья Петровна',
-        },
-      ]
+      leaders: [],
+      [ResponseNames.LEADERS]: { ...defaultResponse },
+      [ResponseNames.AUTHOR]: { ...defaultResponse },
     }
   },
 
   created() {
     document.title = 'Доска лидеров'
 
-    this.$http.get('hello')
-      .then(response => response.body)
-      .then(greeting => {
-        console.log(greeting)
-      })
-      // .catch()
+    this.getLeadersList()
   },
 
   methods: {
+    getLeadersList() {
+      const responseName = ResponseNames.LEADERS
+
+      this.showLoadingOf(responseName)
+      this.$http.get('leaders')
+        .then(response => this.handleResponse(response, responseName))
+        .then(({ data: leaders }) => this.resolveResponse('leaders', responseName, leaders))
+        .catch(({ message }) => this.showErrorOf({ responseName, message }))
+    },
+
+
+    resolveResponse(propertyName, responseName, data) {
+      if (data) {
+        this[propertyName] = data
+        this.requestFinished(responseName)
+      } else {
+        this.showErrorOf({ responseName, message: DefaultMessages.ERROR })
+      }
+    },
+
     submit(event) {
       event.preventDefault();
+
+      if (this.isFormValid()) {
+        this.addLeader()
+      } else {
+        this.showErrorOf({ responseName: ResponseNames.AUTHOR, message: DefaultMessages.INVALID_FORM })
+      }
+      
       return false
     },
 
+    isFormValid() {
+      const { authorName, leaderName, leaderImage, comment } = this
+      return [authorName, leaderName, leaderImage, comment].every(value => value !== '')
+    },
+
+    clearForm() {
+      this.authorName = ''
+      this.leaderName = ''
+      this.leaderImage = ''
+      this.comment = ''
+    },
+
+    handleResponse({ body }, responseName) {
+      return isStatusOk(body)
+        ? body
+        : this.showErrorOf({ response: body, responseName })
+    },
+
+    showErrorOf({ responseName, response, message }) {
+      this[responseName] = {
+        ...defaultResponse,
+        isFailed: true,
+        errorMessage: message || getErrorMessage(response)
+      }
+      
+    },
+
+    showLoadingOf(responseName) {
+      this[responseName] = {
+        ...defaultResponse,
+        isLoading: true,
+      }
+    },
+
+    requestFinished(responseName) {
+      this[responseName] = {
+        ...defaultResponse,
+        isCompleted: true,
+      }
+    },
+
     addLeader() {
-      this.leaders.push({
+      const responseName = ResponseNames.AUTHOR
+      this.showLoadingOf(responseName)
+      this.$http.post('leaders', {
         leaderName: this.leaderName,
         leaderImage: this.leaderImage,
         comment: this.comment,
         authorName: this.authorName,
+      })
+        .then((response) => this.handleResponse(response, responseName))
+        .then(({ data: leader }) => {
+          this.resolveResponse(
+            'leaders',
+            responseName,
+            leader ? [...this.leaders, leader] : null
+          )
+          this.authorName = ''
+          this.leaderName = ''
+          this.leaderImage = ''
+          this.comment = ''
+        })
+        .catch(({ message }) => this.showErrorOf({ responseName, message }))
+    },
+
+    goto() {
+      this.$refs.form.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
       })
     }
   }
@@ -137,29 +230,24 @@ export default {
     margin-bottom: 1.5em;
   }
 
-  .button {
-    transition-duration: 250ms;
-    transition-timing-function: cubic-bezier(0.2, 0, 0.4, 1);
-    transition-property: transform, opacity;
-    will-change: transform, opacity;
-    position: relative;
-    padding: 1em 2em;
-    margin-bottom: 2em;
+  .underscoredButton {
     border: 0;
-    border-radius: 67px 24px 30px 30px / 43px 127px 34px 52px;
-    background-image: linear-gradient(to bottom, deeppink 0%, darkblue 50%, deeppink 100%);
-    background-image: conic-gradient(deeppink 0%, darkblue 50%, deeppink 100%);
-    color: #f7f7f7;
-    font-size: 18px;
-    font-weight: bold;
+    background-color: transparent;
+    padding: 0;
+    text-decoration: none;
+    background-image: linear-gradient(to right, #b8b8b8 0%, #b8b8b8 100%);
+    background-repeat: repeat-x;
+    background-position: center bottom;
+    background-size: .05em .15em;
+    transition-duration: 200ms;
   }
 
-  .button:hover {
-    transform: scale(1.05);
+  .underscoredButton:hover {
+    background-image: linear-gradient(to right, deeppink 0%, deeppink 100%);
   }
 
-  .button:active {
-    transform: scale(1.05) translateY(4px);
+  .form__button:nth-of-type(2) {
+    margin-left: 1.618em
   }
 
   ul {

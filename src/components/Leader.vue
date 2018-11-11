@@ -53,6 +53,10 @@ export default {
     text-align: left;
 }
 
+.comment {
+    max-width: 40ch;
+}
+
 .leader__image {
     
 }
