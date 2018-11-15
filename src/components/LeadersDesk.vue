@@ -112,7 +112,7 @@ export default {
       this.showLoadingOf(responseName)
       this.$http.get('leaders')
         .then(response => this.handleResponse(response, responseName))
-        .then(({ data: leaders }) => this.resolveResponse('leaders', responseName, leaders))
+        .then(({ data }) => this.resolveResponse('leaders', responseName, data.leaders))
         .catch(({ message }) => this.showErrorOf({ responseName, message }))
     },
 
